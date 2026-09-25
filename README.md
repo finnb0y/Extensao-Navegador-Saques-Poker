@@ -1,15 +1,10 @@
 # Solicitador de Saques
 
-Extensão Chrome (Manifest V3) para extrair registros das tabelas de poker (cash e torneio), incluindo o campo **Obs** (olhinho), no site configurado.
+Extensão Chrome (Manifest V3) para extrair registros das tabelas de poker (cash e torneio), incluindo o campo **Obs** (olhinho), em qualquer site.
 
-## Configuração do domínio (obrigatório)
+## Escopo de permissões
 
-Antes de carregar a extensão, ajuste o domínio em:
-
-- `manifest.json`
-  - `host_permissions`
-  - `content_scripts[*].matches`
-  - `web_accessible_resources[*].matches`
+A extensão roda em todas as páginas (`http://*/*`, `https://*/*`), mas só extrai e exibe dados quando encontra uma tabela com a estrutura esperada (colunas de Cash ou de Torneio reconhecidas). Em qualquer outra página, ela fica em segundo plano sem coletar nem mostrar nada. Isso significa que o Chrome vai pedir a permissão "Ler e alterar seus dados em todos os sites" ao instalar/carregar a extensão — é esperado, dado o objetivo de funcionar em qualquer site compatível sem precisar reconfigurar o domínio a cada vez.
 
 ## Como carregar no Chrome
 
