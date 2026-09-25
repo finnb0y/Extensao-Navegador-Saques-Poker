@@ -1,8 +1,11 @@
 const TABLE_SELECTOR = "#table_cash_registros";
 const OBS_CACHE = new Map();
+const OBS_CACHE_MAX_SIZE = 4000; // evita crescimento ilimitado em sessões longas
 const DEBUG = false;
 let observer = null;
 let latestRows = [];
+let collectDebounceTimer = null;
+const COLLECT_DEBOUNCE_MS = 350; // evita reprocessar a página inteira a cada micro-mutação do DOM
 const SECOND_TABLE_SECTION_LABEL = "registros com participacao encerrada";
 
 // Se no SEU site os status "Aberto"/"Fechado" aparecerem trocados mesmo depois
@@ -149,6 +152,17 @@ function rememberObs(keys, obs) {
   for (const key of keys) {
     const normalized = normalize(key);
     if (normalized) OBS_CACHE.set(normalized, value);
+  }
+  // Map preserva ordem de inserção: remove as entradas mais antigas quando
+  // o cache cresce demais, para não vazar memória em sessões longas.
+  if (OBS_CACHE.size > OBS_CACHE_MAX_SIZE) {
+    const excess = OBS_CACHE.size - OBS_CACHE_MAX_SIZE;
+    const iterator = OBS_CACHE.keys();
+    for (let i = 0; i < excess; i += 1) {
+      const oldestKey = iterator.next().value;
+      if (oldestKey === undefined) break;
+      OBS_CACHE.delete(oldestKey);
+    }
   }
 }
 
@@ -440,7 +454,15 @@ function getRows() {
 }
 
 function collectNow() {
-  latestRows = getRows();
+  try {
+    const rows = getRows();
+    latestRows = rows;
+  } catch (error) {
+    // Nunca deixa uma exceção de parsing (ex.: mudança pontual na estrutura
+    // da página) derrubar a coleta silenciosamente nem apagar os dados já
+    // coletados anteriormente — mantém latestRows como estava.
+    log("Erro ao coletar:", error);
+  }
 }
 
 function injectPageHook() {
@@ -466,10 +488,22 @@ function handlePageMessages(event) {
   log("Obs cache updated from network:", entries.length);
 }
 
+function scheduleCollect() {
+  if (collectDebounceTimer) clearTimeout(collectDebounceTimer);
+  collectDebounceTimer = setTimeout(() => {
+    collectDebounceTimer = null;
+    collectNow();
+  }, COLLECT_DEBOUNCE_MS);
+}
+
 function setupObserver() {
   if (observer) observer.disconnect();
   observer = new MutationObserver(() => {
-    collectNow();
+    // Página de poker atualiza saldo/status com frequência (polling, timers);
+    // sem debounce, cada mutação disparava uma varredura completa do
+    // documento (detectPageTournamentName + todas as tabelas), sobrecarregando
+    // a aba até a coleta parecer travada.
+    scheduleCollect();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
